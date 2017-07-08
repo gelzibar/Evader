@@ -15,7 +15,7 @@ public class Coin : MonoBehaviour {
 	}
 
 	void OnTriggerEnter(Collider col) {
-		if (col.transform.parent.tag == "Player") {
+		if (col.tag == "Player") {
 			Destroy (this.gameObject);
 		}
 	}

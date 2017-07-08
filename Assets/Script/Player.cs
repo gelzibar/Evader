@@ -1,276 +1,252 @@
 ﻿using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
+using portlysage;
 
-public class Player : MonoBehaviour
+public class Player : Actor, IControllable, IClimbable
 {
+    private Controller myCon;
+    private StairSupport myClimb;
+    private PortalSupport myPortal;
 
-	private Rigidbody myRigidbody;
-	private bool isUpPressed, isDownPressed, isOnStairs, isOnGround, isPorting;
-	private bool isRightPressed, isLeftPressed;
-	private GameObject Depth;
-	private bool dropState;
-	private float dropTime, dropDistCur, dropDistTotal, dropDistStart;
-	private const float dropMax = 0.3f;
-	private const float portMax = 0.5f;
-	private float portTime;
-	private Vector3 portTarget;
+    private bool isFaded { get; set; }
+    private bool isOnGround { get; set; }
+    private bool isFalling { get; set; }
+    public bool isOnStairs { get; set; }
+    public int stairCount { get; set; }
 
-	private const float height = 1.95f;
+    void Start()
+    {
+        OnStart();
+    }
 
-	private List<Collision> IgnoredCollisions;
+    void FixedUpdate()
+    {
+        OnFixedUpdate();
+    }
 
+    void Update()
+    {
+        OnUpdate();
+    }
 
-	void Start ()
-	{
-		myRigidbody = GetComponent<Rigidbody> ();
-		isUpPressed = false;
-		isOnStairs = false;
-		isOnGround = false;
-		isDownPressed = false;
-		isRightPressed = false;
-		isLeftPressed = false;
-		isPorting = false;
-		Depth = transform.FindChild ("Depth").gameObject;		
-		IgnoredCollisions = new List<Collision> ();
-		portTime = 0.0f;
+    public override void OnStart()
+    {
+        base.OnStart();
+        myCon = new Controller();
+        myClimb = new StairSupport();
+        myPortal = new PortalSupport();
 
-	}
+        Initialize();
+    }
 
-	void FixedUpdate ()
-	{
-		PlayerInput ();
-		Vector3 curPos = myRigidbody.position;
-//		float zVal = 0;
-		bool depthActivity = false;
-		if (isUpPressed || isOnStairs || !isOnGround) {
-//			zVal = -1;
-			depthActivity = true;
-		}
-		Depth.SetActive (depthActivity);
-		float speed = 0.0f;
-		float maxSpeed = 0.05f;
-		if (isLeftPressed == true) {
-			speed = maxSpeed * -1;
-		} else if (isRightPressed == true) {
-			speed = maxSpeed;
-		}
+    public override void OnFixedUpdate()
+    {
+        Vector3 curVel = myRigidbody.velocity;
 
-		myRigidbody.MovePosition (new Vector3 (curPos.x + speed, curPos.y, curPos.z));
+        myRigidbody.velocity = new Vector3(speed, curVel.y, curVel.z);
+    }
 
+    public override void OnUpdate()
+    {
+        ProcessInput();
+        speed = myCon.horizontal * maxSpeed;
+        isOnGround = CheckIfOnGround();
+        isOnStairs = CheckIfOnStairs();
+        isFalling = CheckFalling();
 
-	}
+        myPortal.ResolvePort(this);
+        CleanIgnoredCollisions();
+    }
 
-	void Update ()
-	{
-		isOnGround = CheckIfOnGround ();
-		if (isDownPressed == true && dropState == false ||
-		    isOnStairs == true && dropState == false && !isUpPressed) {
-			SetDropThrough (true);
-			dropTime = 0.0f;
-			dropDistCur = transform.position.y;
-			dropDistStart = transform.position.y;
-		}
-//		} else if (isOnStairs == true) {
-//			Physics.IgnoreLayerCollision (8, 9, true);
-//		}
+    public void ProcessInput()
+    {
+        myCon.StandardInput();
 
-		if (dropState == true && (dropDistStart - transform.position.y) > 2.0f ||
-		    dropState == true && isOnGround == true && dropTime > dropMax) {
-//			dropTime += Time.deltaTime;
-//			dropDistTotal = dropDistCur - transform.position.y;
-			SetDropThrough (false);
-		} else {
-			dropTime += Time.deltaTime;
-		}
+    }
 
-		if (isPorting == true && portTime == 0.0f) {
-			myRigidbody.isKinematic = true;
-			Depth.SetActive (false);
-			transform.position = portTarget;
-			myRigidbody.isKinematic = false;
-		}
+    private void Initialize()
+    {
+        maxSpeed = 2.5f;
+        isFaded = false;
+        isOnGround = false;
+        isFalling = false;
+        isOnStairs = false;
+        stairCount = 0;
+    }
 
-		if (isPorting == true && portTime < portMax) {
-			portTime += Time.deltaTime;
-		} else {
-			isPorting = false;
-			portTime = 0.0f;
-			portTarget = Vector3.zero;
-		}
+    void OnCollisionEnter(Collision col)
+    {
+        // Stair conditions
+        // 1) FULL STAIRS
+        // Full stairs Always observe
+        // - BUT May need to consider normal stairs about to ignore
+        // 2) FLAT SURFACE
+        // IGNORE when not pressing up
+        // IGNORE when coming out from under the stairs
+        // IGNORE when in fadeState
+        // 3) ON STAIRS
+        // IGNORE when player.y is lower than col.y
+        // IGNORE when coming out from under the stairs
+        // 4) FALLING
+        // ALWAYS OBSERVE
 
+        CheckStairCollision(col);
 
-		CleanIgnoredCollisions ();
+    }
 
-		float zDepth = 0.0f;
-		if (isOnStairs || !isOnGround) {
-			Debug.Log ("Stair Anim");
-			zDepth = 1.0f;
-			Vector3 curTopPos = transform.FindChild ("Top").position;
-			Vector3 curBotPos = transform.FindChild ("Bottom").position;
-			transform.FindChild ("Top").position = new Vector3 (curTopPos.x, curTopPos.y, zDepth);
-			transform.FindChild ("Bottom").position = new Vector3 (curBotPos.x, curBotPos.y, zDepth);
-		} else {
-			Vector3 curTopPos = transform.FindChild ("Top").transform.position;
-			Vector3 curBotPos = transform.FindChild ("Bottom").transform.position;
-			transform.FindChild ("Top").transform.position = new Vector3 (curTopPos.x, curTopPos.y, zDepth);
-			transform.FindChild ("Bottom").transform.position = new Vector3 (curBotPos.x, curBotPos.y, zDepth);
-		}
-			
-	}
+    void OnTriggerStay(Collider col)
+    {
+        CheckPortalTrigger(col);
+    }
 
-	void CleanIgnoredCollisions() {
-		foreach (Collision col in IgnoredCollisions.ToArray()) {
-			if (Vector3.Distance (Depth.transform.position, col.transform.position) > 1.1f) {
-				Physics.IgnoreCollision (Depth.GetComponent<Collider> (), col.collider, false);
-				IgnoredCollisions.Remove (col);
-			}
-		}
-	}
+    void CheckPortalTrigger(Collider col)
+    {
+        if (col.transform.name == "Trigger" && col.transform.parent.tag == "Stairwell" && myCon.isUpKey && !myPortal.isPorting)
+        {
+            GameObject target = col.transform.parent.GetComponent<Stairwell>().exit;
+            myPortal.isPorting = true;
+            myPortal.portTarget = target.transform.Find("Trigger").position;
+        }
+    }
 
-	void SetDropThrough (bool setting)
-	{
-		if (setting == true) {
-			Physics.IgnoreLayerCollision (8, 9, true);
-			dropState = true;
-		} else if (setting == false) {
-			Physics.IgnoreLayerCollision (8, 9, false);
-			dropState = false;
-		}
-	}
+    void CheckStairCollision(Collision col)
+    {
+        if (col.gameObject.tag == "Stairs")
+        {
+            Vector3 colPos = col.transform.position;
+            string facing = myClimb.CheckStairDirectionInName(col.transform.parent.name);
+            bool willIgnore = false;
 
-	void PlayerInput ()
-	{
-		float speed = 0.05f;
-		Vector3 curPos = transform.position;
-		if (Input.GetKey (KeyCode.A)) {
-//			myRigidbody.MovePosition(new Vector3 (curPos.x - speed, curPos.y));
-			isLeftPressed = true;
-		} else {
-			isLeftPressed = false;
-		}
-		if (Input.GetKey (KeyCode.D)) {
-//			myRigidbody.MovePosition(new Vector3 (curPos.x + speed, curPos.y));
-			isRightPressed = true;
-		} else {
-			isRightPressed = false;
-		}
+            if (isOnGround)
+            {
+                if (myClimb.OnGroundEvaluation(transform.position, colPos, facing, myCon.isUpKey, isFaded))
+                {
+                    willIgnore = true;
+                }
+            }
+            else if (isFalling)
+            {
+                if (myClimb.FallEvaluation(transform.position, colPos))
+                {
+                    willIgnore = true;
+                }
 
-		if (Input.GetKey (KeyCode.W) && !isOnStairs) {
-			isUpPressed = true;
-		} else {
-			isUpPressed = false;
-		}
-		if (Input.GetKey (KeyCode.S)) {
-			isDownPressed = true;
-		} else {
-			isDownPressed = false;
-		}
+            }
+            else if (isOnStairs)
+            {
+                if (myClimb.StairEvaluation(transform.position, colPos, facing))
+                {
+                    willIgnore = true;
+                }
+            }
 
-		if (Input.GetKey (KeyCode.E)) {
-			Vector3 curBotPos = transform.FindChild ("Bottom").localPosition;
-			transform.FindChild ("Bottom").localPosition = new Vector3 (curBotPos.x, curBotPos.y, 1.0f);
-		}
+            if (willIgnore)
+            {
+                IgnoreStairs(col);
+            }
+            else
+            {
+                IncrementStair();
+            }
+        }
+    }
 
-	}
+    void OnCollisionExit(Collision col)
+    {
+        if (col.gameObject.tag == "Stairs")
+        {
+            DecrementStair();
+        }
+    }
 
-	//	void OnCollisionStay(Collision col) {
-	//		if (col.gameObject.tag == "Stairs") {
-	//			isOnStairs = true;
-	//		}
-	//	}
+    void IgnoreStairs(Collision col)
+    {
+        Collider childCollider = col.gameObject.GetComponent<BoxCollider>().GetComponent<Collider>();
+        Physics.IgnoreCollision(myCollider, childCollider, true);
+        IgnoredCollisions.Add(childCollider);
+        isFaded = true;
+        childCollider.transform.parent.gameObject.GetComponent<Stair>().Fade();
+    }
 
-	void OnCollisionEnter (Collision col)
-	{
-		if (col.gameObject.tag == "Stairs") {
-			string facing = "blank";
-			if (col.transform.parent.name.Contains ("Right")) {
-				Debug.Log ("Contains Right");
-				facing = "right";
-			} else if (col.transform.parent.name.Contains ("Left")) {
-				Debug.Log ("Contains Left");
-				facing = "left";
-			}
-			if (Depth.activeSelf == true) {
-				if (facing == "right" && Depth.transform.position.x > col.transform.position.x && !isOnStairs && isOnGround) {
-					Physics.IgnoreCollision (Depth.GetComponent<Collider> (), col.collider, true);
-					IgnoredCollisions.Add (col);
-				} else if (facing == "left" && Depth.transform.position.x < col.transform.position.x && !isOnStairs && isOnGround) {
-					Physics.IgnoreCollision (Depth.GetComponent<Collider> (), col.collider, true);
-					IgnoredCollisions.Add (col);
-				} else {
-					isOnStairs = true;
-				}
-						
-			}
-		}
-	}
+    void CleanIgnoredCollisions()
+    {
+        foreach (Collider col in IgnoredCollisions.ToArray())
+        {
+            if (Mathf.Abs(transform.position.x - col.transform.position.x) > 1.2f)
+            {
+                Physics.IgnoreCollision(myCollider, col, false);
+                col.transform.parent.gameObject.GetComponent<Stair>().Unfade();
+                IgnoredCollisions.Remove(col);
+            }
+        }
+        if (IgnoredCollisions.Count == 0)
+        {
+            isFaded = false;
+        }
+    }
 
-	void OnCollisionStay (Collision col) {
-		if (col.gameObject.tag == "Stairs") {
-			if (Depth.activeSelf == true) {
-					isOnStairs = true;
-			}
-		}
-	}
+    bool CheckIfOnGround()
+    {
+        bool hitReturn = false;
+        RaycastHit ray;
+        float radius = 0.49f;
+        float offset = 0.025f;
+        float height = 0.475f;
+        Vector3 position = new Vector3(transform.position.x, transform.position.y - height, transform.position.z);
 
-	void OnCollisionExit (Collision col)
-	{
-		if (col.gameObject.tag == "Stairs") {
-			isOnStairs = false;
-		}
-	}
+        int layerMask = 1 << 10;
+        layerMask = ~layerMask;
 
-	void OnTriggerEnter (Collider col) {
-		if (col.transform.name == "Trigger" && col.transform.parent.tag == "Stairwell" && isUpPressed && !isPorting) {
-			GameObject target = col.transform.parent.GetComponent<Stairwell> ().exit;
-//			myRigidbody.isKinematic = true;
-//			Depth.SetActive (false);
-//			transform.position = target.transform.FindChild ("Spawn").position;
-//			myRigidbody.isKinematic = false;
-			isPorting = true;
-			portTarget = target.transform.FindChild ("Spawn").position;
-		}
-	}
+        hitReturn = Physics.SphereCast(position, radius, Vector3.down, out ray, 0.015f, layerMask);
 
-	void StairEntryCheck ()
-	{
+        if (isOnStairs)
+        {
+            hitReturn = false;
+        }
+        return hitReturn;
 
-		// Concern: Depth activation doesn't care about what direction the character is coming from. If coming from the  "back" of the stairs
-		// then weird collision things may occur. Additionally, when those don't occur, the character "hops" over the first stair-- not game breaking, but distracting
+    }
 
-		// Conditions:
-		// If depth sensor is on
-		// And depth sensor is colliding with a stair
-		// Get Depth Sensor Position and Stair Position
-		if (Depth.activeSelf == true) {
-			
-		}
-		
-	}
+    bool CheckIfOnStairs()
+    {
+        bool hitReturn = false;
+        RaycastHit ray;
+        float radius = 0.49f;
+        float offset = 0.025f;
+        float height = 0.475f;
+        Vector3 position = new Vector3(transform.position.x, transform.position.y - height, transform.position.z);
 
-	bool CheckIfOnGround ()
-	{
-		bool hitReturn = false;
-		bool distanceToObj = false;
-		RaycastHit ray;
-		Vector3 position = new Vector3 (transform.position.x, transform.position.y - height / 4.0f, transform.position.z);
-//		Vector3 position = new Vector3(transform.position.x, transform.position.y, transform.position.z);
-		Vector3 boxSize = new Vector3 (transform.localScale.x / 2.0f, transform.localScale.y / 2.0f, transform.localScale.z / 2.0f);
+        int layerMask = 1 << 10;
+        hitReturn = Physics.SphereCast(position, radius, Vector3.down, out ray, 0.02f, layerMask);
 
-		int layerMask = 1 << 8;
-		layerMask = ~layerMask;
-		Debug.DrawRay (position, Vector3.down, Color.blue);
-//		if (Physics.BoxCast(position, boxSize, Vector3.down, transform.rotation, 0.1f, layerMask))  {
-////			SphereCast(position, 1.0f, Vector3.down, out ray, 0.1f, layerMask)) {
-//			falling = false;
-//		}
+        return hitReturn;
 
-//		hitReturn = Physics.BoxCast (position, boxSize, transform.up * -1.0f, transform.rotation, 1.0f, layerMask);
-		hitReturn = Physics.SphereCast (position, 0.45f, Vector3.down, out ray, 0.1f, layerMask);
-//		hitReturn = Physics.Raycast(position, Vector3.down, 0.25f, layerMask);
-		return hitReturn;
-	}
+    }
 
+    bool CheckFalling()
+    {
+        bool val = false;
+        if (!isOnGround && !isOnStairs)
+        {
+            val = true;
+        }
+        return val;
+    }
+
+    public void IncrementStair()
+    {
+        //isOnStairs = true;
+        stairCount++;
+    }
+
+    public void DecrementStair()
+    {
+        stairCount--;
+        if (stairCount < 1)
+        {
+            stairCount = 0;
+            //isOnStairs = false;
+        }
+    }
 }
-
