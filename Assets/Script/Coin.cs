@@ -4,9 +4,10 @@ using UnityEngine;
 
 public class Coin : MonoBehaviour {
 
+	public UIManager myUIManager;
+
 	// Use this for initialization
 	void Start () {
-		
 	}
 	
 	// Update is called once per frame
@@ -16,6 +17,7 @@ public class Coin : MonoBehaviour {
 
 	void OnTriggerEnter(Collider col) {
 		if (col.tag == "Player") {
+			col.gameObject.GetComponent<Player>().coinsCollected++;
 			Destroy (this.gameObject);
 		}
 	}

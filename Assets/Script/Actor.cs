@@ -6,7 +6,7 @@ abstract public class Actor : MonoBehaviour
 {
 
     public Rigidbody myRigidbody { get; set; }
-    protected CapsuleCollider myCapsuleCollider;
+    public CapsuleCollider myCapsuleCollider;
     protected Collider myCollider;
 
     protected List<Collider> IgnoredCollisions;

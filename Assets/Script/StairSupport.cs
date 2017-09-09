@@ -63,7 +63,6 @@ public class StairSupport
         {
             value = true;
         }
-        Debug.Log("Right: " + value);
         return value;
     }
 
@@ -76,7 +75,6 @@ public class StairSupport
         {
             value = true;
         }
-        Debug.Log("Left: " + value);
         return value;
     }
 
@@ -115,7 +113,6 @@ public class StairSupport
         {
             value = true;
         }
-        Debug.Log("Ignore: " + value);
         return value;
     }
 

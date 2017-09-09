@@ -2,15 +2,15 @@
 using System.Collections.Generic;
 using UnityEngine;
 
-public class Stair : AvoidObject {
+public class Platform : AvoidObject {
 
 	// Use this for initialization
 	void Start () {
+		
 	}
 	
 	// Update is called once per frame
 	void Update () {
+		
 	}
-
-
 }

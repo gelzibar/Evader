@@ -8,12 +8,16 @@ public class Player : Actor, IControllable, IClimbable
     private Controller myCon;
     private StairSupport myClimb;
     private PortalSupport myPortal;
+    private UIManager myUI;
 
-    private bool isFaded { get; set; }
-    private bool isOnGround { get; set; }
-    private bool isFalling { get; set; }
-    public bool isOnStairs { get; set; }
-    public int stairCount { get; set; }
+    private bool isFaded;
+    private bool isOnGround;
+    private bool isFalling;
+    public bool isOnStairs;
+    public bool isDisabled;
+    public int stairCount;
+
+    public int coinsCollected;
 
     void Start()
     {
@@ -36,6 +40,7 @@ public class Player : Actor, IControllable, IClimbable
         myCon = new Controller();
         myClimb = new StairSupport();
         myPortal = new PortalSupport();
+        myUI = GameObject.Find("UI Manager").GetComponent<UIManager>();
 
         Initialize();
     }
@@ -57,11 +62,19 @@ public class Player : Actor, IControllable, IClimbable
 
         myPortal.ResolvePort(this);
         CleanIgnoredCollisions();
+
+        if (isDisabled)
+        {
+            myCon.Reset();
+        }
     }
 
     public void ProcessInput()
     {
-        myCon.StandardInput();
+        if (!isDisabled)
+        {
+            myCon.StandardInput();
+        }
 
     }
 
@@ -72,7 +85,9 @@ public class Player : Actor, IControllable, IClimbable
         isOnGround = false;
         isFalling = false;
         isOnStairs = false;
+        isDisabled = false;
         stairCount = 0;
+        coinsCollected = 0;
     }
 
     void OnCollisionEnter(Collision col)
@@ -95,6 +110,11 @@ public class Player : Actor, IControllable, IClimbable
 
     }
 
+    void OnCollisionStay(Collision col)
+    {
+        CheckPlatformCollision(col);
+    }
+
     void OnTriggerStay(Collider col)
     {
         CheckPortalTrigger(col);
@@ -108,6 +128,56 @@ public class Player : Actor, IControllable, IClimbable
             myPortal.isPorting = true;
             myPortal.portTarget = target.transform.Find("Trigger").position;
         }
+        else if (col.transform.name == "Trigger" && col.transform.parent.tag == "Goal" && myCon.isUpKey && !myPortal.isPorting)
+        {
+            Debug.Log("Boop");
+            if (!col.transform.parent.GetComponent<Goal>().isLocked)
+            {
+                Debug.Log("Derp");
+                isDisabled = true;
+                myUI.celebrate = true;
+            }
+
+        }
+    }
+
+    void CheckPlatformCollision(Collision col)
+    {
+        if (col.gameObject.tag == "Platform")
+        {
+            bool willIgnore = false;
+
+            if (this.IsAbove(col.transform.position.y) && myCon.isDownKey)
+            {
+                willIgnore = true;
+            }
+            else if (isOnStairs && !this.IsAbove(col.transform.position.y))
+            {
+                willIgnore = true;
+            }
+            else if (isFalling && isFaded)
+            {
+                willIgnore = true;
+            }
+
+            if (willIgnore)
+            {
+                IgnoreCollision(col);
+            }
+            else
+            {
+            }
+        }
+    }
+
+    bool IsAbove(float target)
+    {
+        bool value = false;
+        if (transform.position.y > target)
+        {
+            value = true;
+        }
+        return value;
     }
 
     void CheckStairCollision(Collision col)
@@ -143,7 +213,7 @@ public class Player : Actor, IControllable, IClimbable
 
             if (willIgnore)
             {
-                IgnoreStairs(col);
+                IgnoreCollision(col);
             }
             else
             {
@@ -160,23 +230,24 @@ public class Player : Actor, IControllable, IClimbable
         }
     }
 
-    void IgnoreStairs(Collision col)
+    void IgnoreCollision(Collision col)
     {
         Collider childCollider = col.gameObject.GetComponent<BoxCollider>().GetComponent<Collider>();
         Physics.IgnoreCollision(myCollider, childCollider, true);
         IgnoredCollisions.Add(childCollider);
         isFaded = true;
-        childCollider.transform.parent.gameObject.GetComponent<Stair>().Fade();
+        childCollider.transform.parent.gameObject.GetComponent<AvoidObject>().Fade();
     }
 
     void CleanIgnoredCollisions()
     {
         foreach (Collider col in IgnoredCollisions.ToArray())
         {
-            if (Mathf.Abs(transform.position.x - col.transform.position.x) > 1.2f)
+            if (Mathf.Abs(transform.position.x - col.transform.position.x) > 1.2f ||
+            Vector3.Distance(transform.position, col.transform.position) > 2.0f)
             {
                 Physics.IgnoreCollision(myCollider, col, false);
-                col.transform.parent.gameObject.GetComponent<Stair>().Unfade();
+                col.transform.parent.gameObject.GetComponent<AvoidObject>().Unfade();
                 IgnoredCollisions.Remove(col);
             }
         }
@@ -200,10 +271,10 @@ public class Player : Actor, IControllable, IClimbable
 
         hitReturn = Physics.SphereCast(position, radius, Vector3.down, out ray, 0.015f, layerMask);
 
-        if (isOnStairs)
-        {
-            hitReturn = false;
-        }
+        /*        if (isOnStairs)
+                {
+                    hitReturn = false;
+                }*/
         return hitReturn;
 
     }
@@ -219,6 +290,11 @@ public class Player : Actor, IControllable, IClimbable
 
         int layerMask = 1 << 10;
         hitReturn = Physics.SphereCast(position, radius, Vector3.down, out ray, 0.02f, layerMask);
+
+        if (isOnGround)
+        {
+            hitReturn = false;
+        }
 
         return hitReturn;
 

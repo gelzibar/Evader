@@ -5,8 +5,9 @@ using UnityEngine;
 public class Controller
 {
 
-    public float horizontal { get; set; }
-    public bool isUpKey { get; set; }
+    public float horizontal;
+    public bool isUpKey;
+    public bool isDownKey;
 
     public void StandardInput()
     {
@@ -21,6 +22,24 @@ public class Controller
             isUpKey = false;
         }
 
+        if (Input.GetKey(KeyCode.S))
+        {
+            isDownKey = true;
+        }
+        else
+        {
+            isDownKey = false;
+        }
+    }
+
+    public void Initialize() {
+        horizontal = 0.0f;
+        isUpKey = false;
+        isDownKey = false;
+    }
+
+    public void Reset() {
+        Initialize();
     }
 
 }
